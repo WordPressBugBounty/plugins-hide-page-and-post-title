@@ -1,17 +1,22 @@
 <?php
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 /*
 Plugin Name: Hide Page And Post Title
 Plugin URI: https://profiles.wordpress.org/arjunthakur#content-plugins/
 Description: Hide the title on individual pages, posts and public custom post types.
 Author: Arjun Thakur
-Version: 1.6.0
-Requires at least: 3.5
+Version: 1.6.2
+Requires at least: 4.1
 Requires PHP: 5.6
 Tested up to: 7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Author URI: https://profiles.wordpress.org/arjunthakur
-Text Domain: hpt
+Text Domain: hide-page-and-post-title
 */
 
 if ( ! class_exists( 'hpt_hidepagetitle' ) ) {
@@ -68,8 +73,8 @@ if ( ! class_exists( 'hpt_hidepagetitle' ) ) {
                 'use strict';
 
                 function hptHideTitle() {
-                    var selector = <?php echo $selector_js; ?>;
-                    var titleText = <?php echo $title_js; ?>;
+                    var selector = <?php echo esc_js( $selector_js ); ?>;
+                    var titleText = <?php echo esc_js( $title_js ); ?>;
                     var target = null;
 
                     if (selector) {
@@ -177,7 +182,7 @@ if ( ! class_exists( 'hpt_hidepagetitle' ) ) {
             <label>
                 <input type="checkbox"
                     name="<?php echo esc_attr( $this->hpt_slug ); ?>"
-                    value="1"<?php echo $checked; ?> />
+                    value="1"<?php echo esc_attr( $checked ); ?> />
                 Hide the title.
             </label>
             <?php
