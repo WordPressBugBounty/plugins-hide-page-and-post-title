@@ -2,113 +2,246 @@
 /*
 Plugin Name: Hide Page And Post Title
 Plugin URI: https://profiles.wordpress.org/arjunthakur#content-plugins/
-Description: Hide the title on single pages and posts.
+Description: Hide the title on individual pages, posts and public custom post types.
 Author: Arjun Thakur
-Version: 1.5.8
+Version: 1.6.0
+Requires at least: 3.5
+Requires PHP: 5.6
+Tested up to: 7.1
 License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Author URI: https://profiles.wordpress.org/arjunthakur
 Text Domain: hpt
-
 */
 
-if ( !class_exists( 'hpt_hidepagetitle' ) ) {
-/*Class*/
+if ( ! class_exists( 'hpt_hidepagetitle' ) ) {
+
     class hpt_hidepagetitle {
-    	private $hpt_slug = 'hpt_headertitle';
-    	private $hpt_selector = '.entry-title';
-    	private $title;
-    	private $hpt_afthead = false;
-/*Constructor*/
-        function __construct(){
-	        add_action( 'add_meta_boxes', array( $this, 'hpt_hptaddbox' ) );
-			add_action( 'save_post', array( $this, 'hpt_hptsave' ) );
-			add_action( 'delete_post', array( $this, 'hpt_hptdelete' ) );
-			add_action( 'wp_head', array( $this, 'hpt_hptheadinsert' ) );
-			add_action( 'the_title', array( $this, 'hpt_hptwraptitle' ) );
-			add_action( 'wp_enqueue_scripts', array( $this, 'hpt_hptloadscripts' ) );
+
+        private $hpt_slug = 'hpt_headertitle';
+        private $hpt_selector = '.entry-title';
+
+        public function __construct() {
+            add_action( 'add_meta_boxes', array( $this, 'hpt_hptaddbox' ) );
+            add_action( 'save_post', array( $this, 'hpt_hptsave' ), 10, 3 );
+            add_action( 'delete_post', array( $this, 'hpt_hptdelete' ) );
+            add_action( 'wp_head', array( $this, 'hpt_hptheadinsert' ) );
+            add_action( 'wp_enqueue_scripts', array( $this, 'hpt_hptloadscripts' ) );
+
+            add_filter(
+                'render_block_core/post-title',
+                array( $this, 'hpt_hide_block_post_title' ),
+                10,
+                2
+            );
         }
-/*Function HPT hidden*/
-		private function hpt_ishidden(  ){	if( is_singular() ){
-				global $post;
-				$toggle = get_post_meta( $post->ID, $this->hpt_slug, true );
-				if( (bool) $toggle ){return true;} else {return false;}}
-				else {return false;}
-				}
-/*Function hptheadinseart for Hiding page title*/
-    	public function hpt_hptheadinsert()
-		 { if( $this->hpt_ishidden() ){ ?> <!-- Hide Page Title -->
-              <script type="text/javascript">
-				jQuery(document).ready(function($){
-				  if( $('<?php echo $this->hpt_selector; ?>').length != 0 ) {
-					$('<?php echo $this->hpt_selector; ?> span.<?php echo $this->hpt_slug; ?>').parents('<?php echo $this->hpt_selector; ?>:first').hide();
-				    } else {
-					  $('h1 span.<?php echo $this->hpt_slug; ?>').parents('h1:first').hide();
-					  $('h2 span.<?php echo $this->hpt_slug; ?>').parents('h2:first').hide();
-				   }
-				});
-              </script><noscript><style type="text/css"> <?php echo $this->hpt_selector; ?> { display:none !important; }</style></noscript>
-             <!-- END Hide Page Title-->
-	    <?php }$this->hpt_afthead = true;
-		 }
-/*Function hptaddbox*/
-		public function hpt_hptaddbox(){
+
+        private function hpt_ishidden( $post_id = 0 ) {
+            if ( ! is_singular() ) {
+                return false;
+            }
+
+            if ( ! $post_id ) {
+                $post_id = get_queried_object_id();
+            }
+
+            if ( ! $post_id ) {
+                return false;
+            }
+
+            return (bool) get_post_meta( $post_id, $this->hpt_slug, true );
+        }
+
+        public function hpt_hptheadinsert() {
+            if ( ! $this->hpt_ishidden() || $this->hpt_is_block_theme() ) {
+                return;
+            }
+
+            $selector    = trim( $this->hpt_selector );
+            $title       = get_the_title( get_queried_object_id() );
+            $selector_js = wp_json_encode( $selector );
+            $title_js    = wp_json_encode( wp_strip_all_tags( $title ) );
+            ?>
+            <!-- Hide Page Title -->
+            <script type="text/javascript">
+            (function () {
+                'use strict';
+
+                function hptHideTitle() {
+                    var selector = <?php echo $selector_js; ?>;
+                    var titleText = <?php echo $title_js; ?>;
+                    var target = null;
+
+                    if (selector) {
+                        try {
+                            target = document.querySelector(selector);
+                        } catch (e) {
+                            target = null;
+                        }
+                    }
+
+                    if (!target) {
+                        var headings = document.querySelectorAll('h1, h2');
+                        var normalizedTitle = String(titleText || '')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+
+                        for (var i = 0; i < headings.length; i++) {
+                            var headingText = (headings[i].textContent || '')
+                                .replace(/\s+/g, ' ')
+                                .trim();
+
+                            if (normalizedTitle && headingText === normalizedTitle) {
+                                target = headings[i];
+                                break;
+                            }
+                        }
+                    }
+
+                    if (target) {
+                        target.style.display = 'none';
+                        target.setAttribute('aria-hidden', 'true');
+                    }
+                }
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', hptHideTitle);
+                } else {
+                    hptHideTitle();
+                }
+            }());
+            </script>
+            <noscript>
+                <style type="text/css">
+                    <?php echo esc_html( $selector ); ?> { display:none !important; }
+                </style>
+            </noscript>
+            <!-- END Hide Page Title -->
+            <?php
+        }
+
+        private function hpt_is_block_theme() {
+            return function_exists( 'wp_is_block_theme' ) && wp_is_block_theme();
+        }
+
+        public function hpt_hide_block_post_title( $block_content, $block ) {
+            if ( ! $this->hpt_is_block_theme() || ! is_singular() ) {
+                return $block_content;
+            }
+
+            $post_id = get_queried_object_id();
+
+            if ( ! $post_id || ! $this->hpt_ishidden( $post_id ) ) {
+                return $block_content;
+            }
+
+            return '';
+        }
+
+        public function hpt_hptaddbox() {
             $posttypes = array( 'post', 'page' );
-            $args = array(
-                       'public'   => true,
-                       '_builtin' => false,
+
+            $post_types = get_post_types(
+                array(
+                    'public'   => true,
+                    '_builtin' => false,
+                ),
+                'names',
+                'and'
             );
 
-            $output = 'names';
-            $operator = 'and';
-
-            $post_types = get_post_types( $args, $output, $operator ); 
-
-            foreach ( $post_types  as $post_type ) {
-              
+            foreach ( $post_types as $post_type ) {
                 $posttypes[] = $post_type;
+            }
 
-            }  
-                        
-			foreach ( $posttypes as $posttype ){add_meta_box( $this->hpt_slug, 'Hide Page and Post Title', array( $this, 'build_hptbox' ), $posttype, 'side' );}
-		} 
-/*Adding box in admindashboard*/
-		public function build_hptbox( $post ){
-			$value = get_post_meta( $post->ID, $this->hpt_slug, true );
-			$checked = '';
-			if( (bool) $value ){ $checked = ' checked="checked"'; }
-			wp_nonce_field( $this->hpt_slug . '_dononce', $this->hpt_slug . '_noncename' );	?>
-			<label><input type="checkbox" name="<?php echo $this->hpt_slug; ?>" <?php echo $checked; ?> /> Hide the title.</label><?php
-		}
-/*HPT wraptitle function*/
-		public function hpt_hptwraptitle( $hptcontent ){
-			if( $this->hpt_ishidden() && $hptcontent == $this->title && $this->hpt_afthead ){$hptcontent = '<span class="' . $this->hpt_slug . '">' . $hptcontent . '</span>';
-			}return $hptcontent;
-		} 
-/*Script*/
-		public function hpt_hptloadscripts(){
-			global $post;
-			$this->title = $post->post_title;
-			if( $this->hpt_ishidden() ){wp_enqueue_script( 'jquery' );}
-		}
+            foreach ( array_unique( $posttypes ) as $posttype ) {
+                add_meta_box(
+                    $this->hpt_slug,
+                    'Hide Page and Post Title',
+                    array( $this, 'build_hptbox' ),
+                    $posttype,
+                    'side'
+                );
+            }
+        }
 
-/*Autosave metabox*/		
-		public function hpt_hptsave( $postID ){
-			if ( ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE )
-				|| !isset( $_POST[ $this->hpt_slug . '_noncename' ] )
-				|| !wp_verify_nonce( $_POST[ $this->hpt_slug . '_noncename' ], $this->hpt_slug . '_dononce' ) ) {
-				return $postID;
-			}
-			$old = get_post_meta( $postID, $this->hpt_slug, true );
-			$new = $_POST[ $this->hpt_slug ] ;
-			if( $old ){if ( is_null( $new ) ){delete_post_meta( $postID, $this->hpt_slug );} else { update_post_meta( $postID, $this->hpt_slug, $new, $old );}
-			} elseif ( !is_null( $new ) ){add_post_meta( $postID, $this->hpt_slug, $new, true );}
-			return $postID;
-		}
-/*Delete metabox */
-		public function hpt_hptdelete( $postID ){delete_post_meta( $postID, $this->hpt_slug );return $postID;}
-		public function set_hpt_selector( $hpt_selector ){if( isset( $hpt_selector ) && is_string( $hpt_selector ) ){$this->hpt_selector = $hpt_selector;}
-		}
+        public function build_hptbox( $post ) {
+            $value   = get_post_meta( $post->ID, $this->hpt_slug, true );
+            $checked = $value ? ' checked="checked"' : '';
 
-/*ENDclass Hide page title*/
-    }$hpt_hidepagetitle = new hpt_hidepagetitle;
+            wp_nonce_field(
+                $this->hpt_slug . '_dononce',
+                $this->hpt_slug . '_noncename'
+            );
+            ?>
+            <label>
+                <input type="checkbox"
+                    name="<?php echo esc_attr( $this->hpt_slug ); ?>"
+                    value="1"<?php echo $checked; ?> />
+                Hide the title.
+            </label>
+            <?php
+        }
+
+        public function hpt_hptloadscripts() {
+            if ( $this->hpt_ishidden() && ! $this->hpt_is_block_theme() ) {
+                wp_enqueue_script( 'jquery' );
+            }
+        }
+
+        public function hpt_hptsave( $postID, $post = null, $update = false ) {
+            if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+                return $postID;
+            }
+
+            if ( defined( 'DOING_CRON' ) && DOING_CRON ) {
+                return $postID;
+            }
+
+            if ( defined( 'WP_REST_REQUEST' ) && WP_REST_REQUEST ) {
+                return $postID;
+            }
+
+            if ( wp_is_post_revision( $postID ) ) {
+                return $postID;
+            }
+
+            if ( ! isset( $_POST[ $this->hpt_slug . '_noncename' ] ) ) {
+                return $postID;
+            }
+
+            $nonce = sanitize_text_field(
+                wp_unslash( $_POST[ $this->hpt_slug . '_noncename' ] )
+            );
+
+            if ( ! wp_verify_nonce( $nonce, $this->hpt_slug . '_dononce' ) ) {
+                return $postID;
+            }
+
+            if ( ! current_user_can( 'edit_post', $postID ) ) {
+                return $postID;
+            }
+
+            if ( isset( $_POST[ $this->hpt_slug ] ) ) {
+                update_post_meta( $postID, $this->hpt_slug, '1' );
+            } else {
+                delete_post_meta( $postID, $this->hpt_slug );
+            }
+
+            return $postID;
+        }
+
+        public function hpt_hptdelete( $postID ) {
+            delete_post_meta( $postID, $this->hpt_slug );
+            return $postID;
+        }
+
+        public function set_hpt_selector( $hpt_selector ) {
+            if ( is_string( $hpt_selector ) && '' !== trim( $hpt_selector ) ) {
+                $this->hpt_selector = $hpt_selector;
+            }
+        }
+    }
+
+    $hpt_hidepagetitle = new hpt_hidepagetitle;
 }
